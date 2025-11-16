@@ -1,10 +1,9 @@
 === Plugin Name ===
-Contributors: maxchirkov
-Donate link: http://www.ibsteam.net/donate
+Contributors: maxchirkov apiosys
 Tags: login, log, users
-Requires at least: 3.0
-Tested up to: 4.7.5
-Stable tag: 1.1.3
+Requires at least: 5.0
+Tested up to: 6.8
+Stable tag: 2.0.0
 
 This plugin keeps a log of WordPress user logins. Offers user and date filtering, and export features.
 
@@ -48,6 +47,8 @@ Screen Options are available at the top of the Login Log page. Click on the *Scr
 2. Login Log Management Screen.
 
 == Changelog ==
+= 2.0.0 - 2025-11-17 =
+* Code completely re-factored for modern standards.
 
 **Version 1.1.3**
 - Minor fix.
