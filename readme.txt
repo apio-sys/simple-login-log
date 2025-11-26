@@ -1,17 +1,18 @@
-=== Plugin Name ===
+=== Simple Login Log ===
 Contributors: maxchirkov apiosys
 Tags: login, log, users
-Requires at least: 5.0
+Requires at least: 6.5
 Tested up to: 6.8
 Stable tag: 2.0.0
+Requires PHP: 8.2
+License: MIT
+License URI: https://github.com/apio-sys/simple-login-log/blob/main/LICENSE
 
 This plugin keeps a log of WordPress user logins. Offers user and date filtering, and export features.
 
 == Description ==
 
 Simple log of user logins. Tracks user name, time of login, IP address and browser user agent.
-
-[Demo Video](http://screenr.com/kfEs "Demo Video")
 
 **Features include:**
 
@@ -27,11 +28,10 @@ Simple log of user logins. Tracks user name, time of login, IP address and brows
 - Russian [ru_RU]
 - Ukrainian [ua_UA]
 - Chinese [zh_CN] by [Mihuwa](http://www.mihuwa.com/)
-- French [fr_FR] by [Mehdi Hamida](http://www.lo-geek.fr/)
+- French [fr_FR] by Mehdi Hamida
 
 * Author: Max Chirkov
-* Author URI: [http://simplerealtytheme.com/](http://simplerealtytheme.com/ "Real Estate Themes & Plugins for WordPress")
-* Copyright: Released under GNU GENERAL PUBLIC LICENSE
+* Author: Joris Le Blansch
 
 == Installation ==
 
@@ -47,7 +47,7 @@ Screen Options are available at the top of the Login Log page. Click on the *Scr
 2. Login Log Management Screen.
 
 == Changelog ==
-= 2.0.0 - 2025-11-17 =
+= 2.0.0 - 2025-11-26 =
 * Code completely re-factored for modern standards.
 
 **Version 1.1.3**

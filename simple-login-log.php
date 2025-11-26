@@ -1,14 +1,18 @@
 <?php
 /*
   Plugin Name: Simple Login Log
-  Plugin URI: http://simplerealtytheme.com
+  Plugin URI: https://apio.systems
   Description: This plugin keeps a log of WordPress user logins. Offers user filtering and export features.
+  Version: 2.0.0
   Author: Max Chirkov
-  Version: 1.1.3
-  Author URI: http://SimpleRealtyTheme.com
+  Author: Joris Le Blansch
+  Author URI: https://apio.systems
+  License: MIT
+  License URI: https://github.com/apio-sys/simple-login-log/blob/main/LICENSE
+  Text Domain: simple-login-log
+  Requires at least: 6.5
+  Requires PHP: 8.2
  */
-
-//TODO: add cleanup method on uninstall
 
 if( !class_exists( 'SimpleLoginLog' ) )
 {
@@ -22,8 +26,8 @@ if( !class_exists( 'SimpleLoginLog' ) )
     private $opt = false;
     private $login_success = 1;
     public $data_labels = array();
-
-     private $values;
+    private $installed_ver = null; // FIX: Declared property to avoid PHP 8.2+ deprecation warning
+    private $values;
 
     function __construct()
     {
@@ -66,25 +70,22 @@ if( !class_exists( 'SimpleLoginLog' ) )
         add_action( 'wp', array($this, 'init_scheduled_events') );
         add_action('truncate_sll', array($this, 'cron') );
 
-        //Load Locale
-        add_action('plugins_loaded', array($this, 'load_locale'), 10 );
-
         //For translation purposes
         $this->data_labels = array(
-            'Successful'        => __('Successful', 'sll'),
-            'Failed'            => __('Failed', 'sll'),
-            'Login'             => __('Login', 'sll'),
-            'User Agent'        => __('User Agent', 'sll'),
-            'Login Redirect'    => __('Login Redirect', 'sll'),
-            'id'                => __('#', 'sll'),
-            'uid'               => __('User ID', 'sll'),
-            'user_login'        => __('Username', 'sll'),
-            'user_role'         => __('User Role', 'sll'),
-            'name'              => __('Name', 'sll'),
-            'time'              => __('Time', 'sll'),
-            'ip'                => __('IP Address', 'sll'),
-            'login_result'      => __('Login Result', 'sll'),
-            'data'              => __('Data', 'sll'),
+            'Successful'        => __('Successful', 'simple-login-log'),
+            'Failed'            => __('Failed', 'simple-login-log'),
+            'Login'             => __('Login', 'simple-login-log'),
+            'User Agent'        => __('User Agent', 'simple-login-log'),
+            'Login Redirect'    => __('Login Redirect', 'simple-login-log'),
+            'id'                => __('#', 'simple-login-log'),
+            'uid'               => __('User ID', 'simple-login-log'),
+            'user_login'        => __('Username', 'simple-login-log'),
+            'user_role'         => __('User Role', 'simple-login-log'),
+            'name'              => __('Name', 'simple-login-log'),
+            'time'              => __('Time', 'simple-login-log'),
+            'ip'                => __('IP Address', 'simple-login-log'),
+            'login_result'      => __('Login Result', 'simple-login-log'),
+            'data'              => __('Data', 'simple-login-log'),
         );
 
         //Deactivation hook
@@ -105,12 +106,6 @@ if( !class_exists( 'SimpleLoginLog' ) )
      }
 
 
-    function load_locale()
-    {
-            load_plugin_textdomain( 'sll', false, basename(dirname(__FILE__)) . '/languages/' );
-    }
-
-
     function cron()
     {
         SimpleLoginLog::truncate_log();
@@ -121,7 +116,8 @@ if( !class_exists( 'SimpleLoginLog' ) )
     {
 
         //execute only on login_log page, othewise return null
-        $page = ( isset($_GET['page']) ) ? esc_attr($_GET['page']) : false;
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Checking page parameter for admin screen, read-only
+        $page = ( isset($_GET['page']) ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : false;
         if( 'login_log' != $page )
             return;
 
@@ -132,16 +128,18 @@ if( !class_exists( 'SimpleLoginLog' ) )
         $per_page_option = $current_screen->id . '_' . $per_page_field;
 
         //Save options that were applied
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- WordPress handles nonce verification for screen options internally
         if( isset($_REQUEST['wp_screen_options']) && isset($_REQUEST['wp_screen_options']['value']) )
         {
-            update_option( $per_page_option, esc_html($_REQUEST['wp_screen_options']['value']) );
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- WordPress handles nonce verification for screen options internally
+            update_option( $per_page_option, absint( wp_unslash( $_REQUEST['wp_screen_options']['value'] ) ) );
         }
 
         //prepare options for display
 
         //if per page option is not set, use default
         $per_page_val = get_option($per_page_option, 20);
-        $args = array('label' => __('Records', 'sll'), 'default' => $per_page_val );
+        $args = array('label' => __('Records', 'simple-login-log'), 'default' => $per_page_val );
 
         //display options
         add_screen_option($per_page_field, $args);
@@ -217,7 +215,9 @@ if( !class_exists( 'SimpleLoginLog' ) )
         $log_duration = (int)$opt['log_duration'];
 
         if( 0 < $log_duration ){
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, not user input
             $sql = $wpdb->prepare( "DELETE FROM {$this->table} WHERE time < DATE_SUB(CURDATE(),INTERVAL %d DAY)", $log_duration);
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $sql is prepared above with $wpdb->prepare()
             $wpdb->query($sql);
         }
 
@@ -228,7 +228,8 @@ if( !class_exists( 'SimpleLoginLog' ) )
      {
          global $wpdb;
 
-         $nonce = isset($_REQUEST['_wpnonce']) ? $_REQUEST['_wpnonce'] : false;
+         // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- Nonce is being verified immediately below, wp_verify_nonce() handles sanitization
+         $nonce = isset($_REQUEST['_wpnonce']) ? wp_unslash( $_REQUEST['_wpnonce'] ) : false;
 
          if (!wp_verify_nonce($nonce, 'delete_sll'))
          {
@@ -236,8 +237,10 @@ if( !class_exists( 'SimpleLoginLog' ) )
          }
          else
          {
+             // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, not user input
              $sql = "DELETE FROM {$this->table}";
 
+             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- No user input, table name is internal property
              if ($wpdb->query($sql))
              {
                  $this->set('deleted', true);
@@ -257,7 +260,9 @@ if( !class_exists( 'SimpleLoginLog' ) )
         if( $this->installed_ver != $this->db_ver )
         {
             //if table does't exist, create a new one
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- SHOW TABLES check for custom table, caching not applicable
             if( !$wpdb->get_row("SHOW TABLES LIKE '{$this->table}'") ){
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange -- Plugin installation/upgrade requires creating custom log table
                 $sql = "CREATE TABLE  " . $this->table . "
                     (
                         id INT( 11 ) NOT NULL AUTO_INCREMENT ,
@@ -317,7 +322,9 @@ if( !class_exists( 'SimpleLoginLog' ) )
          */
         global $wpdb;
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, not user input
         $sql = "SELECT * FROM {$this->table} LIMIT 1";
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema check for custom table, caching not applicable
         $fields = $wpdb->get_row($sql, 'ARRAY_A');
 
         if( !$fields ){
@@ -330,7 +337,9 @@ if( !class_exists( 'SimpleLoginLog' ) )
         if( !array_search('login_result', $field_names) )
         {
             //add the new field since it doesn't exist
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, not user input
             $sql = "ALTER TABLE {$this->table} ADD COLUMN login_result varchar(1) NOT NULL AFTER ip, ADD INDEX (login_result);";
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- DDL operation on custom table, caching not applicable
             $insert = $wpdb->query( $sql );
 
             //update version record if it has been updated
@@ -349,7 +358,9 @@ if( !class_exists( 'SimpleLoginLog' ) )
          */
         global $wpdb;
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, not user input
         $sql = "SELECT * FROM {$this->table} LIMIT 1";
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema check for custom table, caching not applicable
         $fields = $wpdb->get_row($sql, 'ARRAY_A');
 
         if( !$fields ){
@@ -362,7 +373,9 @@ if( !class_exists( 'SimpleLoginLog' ) )
         if( !array_search('user_role', $field_names) )
         {
             //add the new field since it doesn't exist
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, not user input
             $sql = "ALTER TABLE {$this->table} ADD COLUMN user_role varchar(30) NOT NULL AFTER user_login;";
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- DDL operation on custom table, caching not applicable
             $insert = $wpdb->query( $sql );
 
             //update version record if it has been updated
@@ -380,7 +393,9 @@ if( !class_exists( 'SimpleLoginLog' ) )
           */
          global $wpdb;
 
+         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, not user input
          $sql = "SELECT * FROM {$this->table} LIMIT 1";
+         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema check for custom table, caching not applicable
          $fields = $wpdb->get_row($sql, 'ARRAY_A');
 
          if( !$fields ){
@@ -388,7 +403,9 @@ if( !class_exists( 'SimpleLoginLog' ) )
              return;
          }
 
+         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, not user input
          $sql = "ALTER TABLE {$this->table} MODIFY user_role varchar(255) NOT NULL;";
+         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- DDL operation on custom table, caching not applicable
          $insert = $wpdb->query( $sql );
 
          //update version record if it has been updated
@@ -401,17 +418,34 @@ if( !class_exists( 'SimpleLoginLog' ) )
     //Initializing Settings
     function settings_api_init()
     {
-        add_settings_section('simple_login_log', __('Simple Login Log', 'sll'), array($this, 'sll_settings'), 'general');
-        add_settings_field('field_log_duration', __('Truncate Log Entries', 'sll'), array($this, 'field_log_duration'), 'general', 'simple_login_log');
-        add_settings_field('field_log_failed_attempts', __('Log Failed Attempts', 'sll'), array($this, 'field_log_failed_attempts'), 'general', 'simple_login_log');
-        register_setting( 'general', 'simple_login_log' );
+        add_settings_section('simple_login_log', __('Simple Login Log', 'simple-login-log'), array($this, 'sll_settings'), 'general');
+        add_settings_field('field_log_duration', __('Truncate Log Entries', 'simple-login-log'), array($this, 'field_log_duration'), 'general', 'simple_login_log');
+        add_settings_field('field_log_failed_attempts', __('Log Failed Attempts', 'simple-login-log'), array($this, 'field_log_failed_attempts'), 'general', 'simple_login_log');
+        register_setting( 'general', 'simple_login_log', array($this, 'sanitize_settings') );
 
+    }
+
+
+    function sanitize_settings( $input )
+    {
+        // Sanitize the settings array
+        $sanitized = array();
+        
+        if ( isset( $input['log_duration'] ) ) {
+            $sanitized['log_duration'] = absint( $input['log_duration'] );
+        }
+        
+        if ( isset( $input['failed_attempts'] ) ) {
+            $sanitized['failed_attempts'] = (bool) $input['failed_attempts'];
+        }
+        
+        return $sanitized;
     }
 
 
     function sll_admin_menu()
     {
-        add_submenu_page( 'users.php', __('Simple Login Log', 'sll'), __('Login Log', 'sll'), 'list_users', 'login_log', array($this, 'log_manager') );
+        add_submenu_page( 'users.php', __('Simple Login Log', 'simple-login-log'), __('Login Log', 'simple-login-log'), 'list_users', 'login_log', array($this, 'log_manager') );
     }
 
 
@@ -424,11 +458,12 @@ if( !class_exists( 'SimpleLoginLog' ) )
     function field_log_duration()
     {
         $duration = (null !== $this->opt['log_duration']) ? $this->opt['log_duration'] : $this->log_duration;
-        $output = '<input type="text" value="' . $duration . '" name="simple_login_log[log_duration]" size="10" class="code" /> ' . __('days and older.', 'sll');
-        echo $output;
-        echo "<p>" . __("Leave empty or enter 0 if you don't want the log to be truncated.", 'sll') . "</p>";
+        $output = '<input type="text" value="' . esc_attr($duration) . '" name="simple_login_log[log_duration]" size="10" class="code" /> ' . esc_html__('days and older.', 'simple-login-log');
+        echo wp_kses_post($output);
+        echo "<p>" . esc_html__("Leave empty or enter 0 if you don't want the log to be truncated.", 'simple-login-log') . "</p>";
 
         //since we're on the General Settings page - update cron schedule if settings has been updated
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- WordPress Settings API handles nonce verification
         if( isset($_REQUEST['settings-updated']) ){
             wp_clear_scheduled_hook('truncate_sll');
             //$this->init_scheduled_events();
@@ -439,13 +474,14 @@ if( !class_exists( 'SimpleLoginLog' ) )
     function field_log_failed_attempts()
     {
         $failed_attempts = ( isset($this->opt['failed_attempts']) ) ? $this->opt['failed_attempts'] : false;
-        echo '<input type="checkbox" name="simple_login_log[failed_attempts]" value="1" ' . checked( $failed_attempts, 1, false ) . ' /> ' . __('Logs failed attempts where user name and password are entered. Will not log if at least one of the mentioned fields is empty.', 'sll');
+        echo '<input type="checkbox" name="simple_login_log[failed_attempts]" value="1" ' . checked( $failed_attempts, 1, false ) . ' /> ' . esc_html__('Logs failed attempts where user name and password are entered. Will not log if at least one of the mentioned fields is empty.', 'simple-login-log');
     }
 
 
     function admin_header()
     {
-        $page = ( isset($_GET['page']) ) ? esc_attr($_GET['page']) : false;
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Checking page parameter for admin screen, read-only
+        $page = ( isset($_GET['page']) ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : false;
         if( 'login_log' != $page )
             return;
 
@@ -464,8 +500,9 @@ if( !class_exists( 'SimpleLoginLog' ) )
         $uid = ($userdata && $userdata->ID) ? $userdata->ID : 0;
 
         $data[$this->data_labels['Login']] = ( 1 == $this->login_success ) ? $this->data_labels['Successful'] : $this->data_labels['Failed'];
-        if ( isset( $_REQUEST['redirect_to'] ) ) { $data[$this->data_labels['Login Redirect']] = esc_attr( $_REQUEST['redirect_to'] ); }
-        $data[$this->data_labels['User Agent']] = esc_attr( $_SERVER['HTTP_USER_AGENT'] );
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading redirect_to from WordPress login, no nonce needed for logging
+        if ( isset( $_REQUEST['redirect_to'] ) ) { $data[$this->data_labels['Login Redirect']] = sanitize_text_field( wp_unslash( $_REQUEST['redirect_to'] ) ); }
+        $data[$this->data_labels['User Agent']] = isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
 
         $serialized_data = serialize($data);
 
@@ -484,7 +521,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             'user_login'    => $user_login,
             'user_role'     => $user_role,
             'time'          => current_time('mysql'),
-            'ip'            => isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? esc_attr($_SERVER['HTTP_X_FORWARDED_FOR']) : esc_attr($_SERVER['REMOTE_ADDR']),
+            'ip'            => isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) : ( isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '' ),
             'login_result'  => $this->login_success,
             'data'          => $serialized_data,
             );
@@ -499,6 +536,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
     {
         global $wpdb;
 
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- INSERT into custom log table, this is the core functionality of the plugin
         $wpdb->insert( $this->table, $values, $format );
     }
 
@@ -506,24 +544,32 @@ if( !class_exists( 'SimpleLoginLog' ) )
     function make_where_query()
     {
         $where = false;
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameters for display, read-only
         if( isset($_GET['filter']) && '' != $_GET['filter'] )
         {
-            $filter = esc_attr( $_GET['filter'] );
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameter, already checked with isset above
+            $filter = esc_sql( sanitize_text_field( wp_unslash( $_GET['filter'] ) ) );
             $where['filter'] = "(user_login LIKE '%{$filter}%' OR ip LIKE '%{$filter}%')";
         }
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameters for display, read-only
         if( isset($_GET['user_role']) && '' != $_GET['user_role'] )
         {
-            $user_role = esc_attr( $_GET['user_role'] );
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameter, already checked with isset above
+            $user_role = esc_sql( sanitize_text_field( wp_unslash( $_GET['user_role'] ) ) );
             $where['user_role'] = "user_role LIKE '%{$user_role}%'";
         }
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameters for display, read-only
         if( isset($_GET['result']) && '' != $_GET['result'] )
         {
-            $result = esc_attr( $_GET['result'] );
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameter, already checked with isset above
+            $result = esc_sql( sanitize_text_field( wp_unslash( $_GET['result'] ) ) );
             $where['result'] = "login_result = '{$result}'";
         }
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameters for display, read-only
         if( isset($_GET['datefilter']) && '' != $_GET['datefilter'] )
         {
-            $datefilter = esc_attr( $_GET['datefilter'] );
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameter, already checked with isset above
+            $datefilter = esc_sql( sanitize_text_field( wp_unslash( $_GET['datefilter'] ) ) );
             $year = substr($datefilter, 0, 4);
             $month = substr($datefilter, -2);
             $where['datefilter'] = "YEAR(time) = {$year} AND MONTH(time) = {$month}";
@@ -543,12 +589,15 @@ if( !class_exists( 'SimpleLoginLog' ) )
     {
         global $wpdb;
 
+        // SECURITY FIX: Whitelist allowed columns for ORDER BY to prevent SQL injection
         $orderCol = array(
             'uid' => 'uid',
             'user_login' => 'user_login',
             'time' => 'time',
             'ip' => 'ip'
         );
+        
+        // SECURITY FIX: Whitelist allowed directions for ORDER BY to prevent SQL injection
         $orderDir = array(
             'asc' => 'ASC',
             'desc'=> 'DESC'
@@ -564,8 +613,15 @@ if( !class_exists( 'SimpleLoginLog' ) )
         if( is_array($where) && !empty($where) )
             $where = ' WHERE ' . implode(' AND ', $where);
 
-        $sql = "SELECT * FROM $this->table" . $where . " ORDER BY {$orderby} {$order} " . 'LIMIT ' . $limit . ' OFFSET ' . $offset;
+        // SECURITY FIX: Use properly escaped and validated ORDER BY clause
+        $sql = $wpdb->prepare(
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, $where uses esc_sql(), $orderby and $order validated against whitelist
+            "SELECT * FROM {$this->table}{$where} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d",
+            $limit,
+            $offset
+        );
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $sql is prepared above with $wpdb->prepare()
         $data = $wpdb->get_results($sql, 'ARRAY_A');
 
         return $data;
@@ -580,7 +636,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
         $log_table->prepare_items();
 
         echo '<div class="wrap srp">';
-            echo '<h2>' . __('Login Log', 'sll') . '</h2>';
+            echo '<h2>' . esc_html__('Login Log', 'simple-login-log') . '</h2>';
 
             if ($this->get('deleted'))
             {
@@ -589,14 +645,16 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
             echo '<div class="tablenav top">';
                 echo '<div class="alignleft actions">';
+                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- date_filter() returns wp_kses sanitized HTML
                     echo $this->date_filter();
                 echo '</div>';
 
-                $username = ( isset($_GET['filter']) ) ? esc_attr($_GET['filter']) : false;
+                // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameter for display, read-only
+                $username = ( isset($_GET['filter']) ) ? sanitize_text_field( wp_unslash( $_GET['filter'] ) ) : '';
                 echo '<form method="get" class="alignright">';
                     echo '<p class="search-box">';
                         echo '<input type="hidden" name="page" value="login_log" />';
-                        echo '<label>' . __('Username:', 'sll') . ' </label><input type="text" name="filter" class="filter-username" value="' . $username . '" /> <input class="button" type="submit" value="' . __('Filter User', 'sll') . '" />';
+                        echo '<label>' . esc_html__('Username:', 'simple-login-log') . ' </label><input type="text" name="filter" class="filter-username" value="' . esc_attr($username) . '" /> <input class="button" type="submit" value="' . esc_attr__('Filter User', 'simple-login-log') . '" />';
                         echo '<br />';
                     echo '</p>';
                 echo '</form>';
@@ -611,7 +669,8 @@ if( !class_exists( 'SimpleLoginLog' ) )
                 }
 
                 echo '<div class="alignright actions">';
-                $mode = ( isset($_GET['mode']) ) ? esc_attr($_GET['mode']) : false;
+                // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading mode parameter for display, read-only
+                $mode = ( isset($_GET['mode']) ) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : '';
                 $log_table->view_switcher($mode);
                 echo '</div>';
             echo '</div>';
@@ -626,14 +685,16 @@ if( !class_exists( 'SimpleLoginLog' ) )
             echo '<input type="hidden" name="download-login-log" value="true" />';
             echo '<p class="submit">';
             echo '<input type="submit" name="submit" id="submit" class="button" value="Export Log to CSV">';
-            echo '&nbsp;&nbsp;<a id="delete-all" href="' . wp_nonce_url('users.php?page=login_log&action=delete', 'delete_sll') . '" onclick="return confirm(\'IMPORTANT: All User Log records will be deleted.\')">Delete All</a>';
+            echo '&nbsp;&nbsp;<a id="delete-all" href="' . esc_url(wp_nonce_url('users.php?page=login_log&action=delete', 'delete_sll')) . '" onclick="return confirm(\'IMPORTANT: All User Log records will be deleted.\')">Delete All</a>';
             echo '</p>';
             echo '</form>';
             //if filtered results - add export filtered results button
             $where = false;
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Checking if filters are set for export, nonce verified during export
             if( isset( $_GET['filter'] ) || isset( $_GET['user_role'] ) || isset( $_GET['datefilter'] ) || isset( $_GET['result'] ) )
             {
                 $where = array();
+                // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Building filter array for export, nonce verified during export
                 foreach($_GET as $k => $v)
                 {
                     $where[$k] = @esc_attr($v);
@@ -645,7 +706,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
                 echo '<input type="hidden" name="page" value="login_log" />';
                 echo '<input type="hidden" name="download-login-log" value="true" />';
                 echo '<input type="hidden" name="where" value="' . esc_attr(serialize($where)) . '" />';
-                submit_button( __('Export Current Results to CSV', 'sll'), 'secondary' );
+                submit_button( __('Export Current Results to CSV', 'simple-login-log'), 'secondary' );
                 echo '</form>';
 
             }
@@ -657,12 +718,13 @@ if( !class_exists( 'SimpleLoginLog' ) )
     function date_filter()
     {
         global $wpdb;
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, not user input
         $sql = "SELECT DISTINCT YEAR(time) as year, MONTH(time)as month FROM {$this->table} ORDER BY YEAR(time), MONTH(time) desc";
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- No user input, table name is internal property
         $results = $wpdb->get_results($sql);
 
         if(!$results)
-            return;
-
+            return '';
 
         $option = '';
         foreach($results as $row)
@@ -670,16 +732,34 @@ if( !class_exists( 'SimpleLoginLog' ) )
             //represent month in double digits
             $timestamp = mktime(0, 0, 0, $row->month, 1, $row->year);
             $month = (strlen($row->month) == 1) ? '0' . $row->month : $row->month;
-            $datefilter = ( isset($_GET['datefilter']) ) ? $_GET['datefilter'] : false;
-            $option .= '<option value="' . $row->year . $month . '" ' . selected($row->year . $month, $datefilter, false) . '>' . date('F', $timestamp) . ' ' . $row->year . '</option>';
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameter for display, read-only
+            $datefilter = ( isset($_GET['datefilter']) ) ? sanitize_text_field( wp_unslash( $_GET['datefilter'] ) ) : '';
+            $option .= '<option value="' . esc_attr($row->year . $month) . '" ' . selected($row->year . $month, $datefilter, false) . '>' . esc_html(date_i18n('F', $timestamp)) . ' ' . esc_html($row->year) . '</option>';
         }
 
         $output = '<form method="get">';
         $output .= '<input type="hidden" name="page" value="login_log" />';
-        $output .= '<select name="datefilter"><option value="">' . __('View All', 'sll') . '</option>' . $option . '</select>';
-        $output .= '<input class="button" type="submit" value="' . __('Filter', 'sll') . '" />';
+        $output .= '<select name="datefilter"><option value="">' . esc_html__('View All', 'simple-login-log') . '</option>' . $option . '</select>';
+        $output .= '<input class="button" type="submit" value="' . esc_attr__('Filter', 'simple-login-log') . '" />';
         $output .= '</form>';
-        return $output;
+        
+        // Allow form elements for the date filter
+        $allowed_html = array(
+            'form' => array('method' => array()),
+            'input' => array(
+                'type' => array(),
+                'name' => array(),
+                'value' => array(),
+                'class' => array(),
+            ),
+            'select' => array('name' => array()),
+            'option' => array(
+                'value' => array(),
+                'selected' => array(),
+            ),
+        );
+        
+        return wp_kses($output, $allowed_html);
     }
 
 
@@ -687,20 +767,23 @@ if( !class_exists( 'SimpleLoginLog' ) )
     {
         //Check if download was initiated
 
-        $download = (isset($_GET['download-login-log'])) ? esc_attr($_GET['download-login-log']) : false;
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified below with check_admin_referer()
+        $download = (isset($_GET['download-login-log'])) ? sanitize_text_field( wp_unslash( $_GET['download-login-log'] ) ) : false;
 
         if($download)
         {
             check_admin_referer( 'ssl_export_log' );
 
-            $where = ( isset($_GET['where']) && '' != $_GET['where'] ) ? $_GET['where'] : false;
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Nonce verified above, serialized filter data will be sanitized after unserialization
+            $where = ( isset($_GET['where']) && '' != $_GET['where'] ) ? wp_unslash( $_GET['where'] ) : false;
             $where = maybe_unserialize( stripcslashes($where) );
 
             if( is_array($where) && !empty($where) )
             {
                 foreach($where as $k => $v)
                 {
-                    $_GET[$k] = esc_attr($v);
+                    // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified above, values already sanitized in $where array
+                    $_GET[$k] = sanitize_text_field($v);
                 }
             }
 
@@ -720,18 +803,21 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
         }
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, $where uses esc_sql() from make_where_query()
         $sql = "SELECT * FROM {$this->table}{$where}";
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $where clause is built with esc_sql() in make_where_query()
         $data = $wpdb->get_results($sql, 'ARRAY_A');
 
         if(!$data)
             return;
 
         //date string to suffix the file nanme: month - day - year - hour - minute
-        $suffix = date('n-j-y_H-i');
+        $suffix = wp_date('n-j-y_H-i');
 
         // send response headers to the browser
         header( 'Content-Type: text/csv' );
         header( 'Content-Disposition: attachment;filename=login_log_' . $suffix . '.csv');
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Using php://output stream for direct CSV download, not writing to filesystem
         $fp = fopen('php://output', 'w');
 
         $i = 0;
@@ -740,14 +826,20 @@ if( !class_exists( 'SimpleLoginLog' ) )
             //output header row
             if(0 == $i)
             {
+                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fputcsv -- Using php://output stream for direct CSV download
                 fputcsv( $fp, array_keys($row) );
             }
-            $row_data = (!empty($tmp)) ? array_map(create_function('$key, $value', 'return $key.": ".$value." | ";'), array_keys($tmp), array_values($tmp)) : array();
+            // FIX: Replace deprecated create_function with anonymous function
+            $row_data = (!empty($tmp)) ? array_map(function($key, $value) {
+                return $key.": ".$value." | ";
+            }, array_keys($tmp), array_values($tmp)) : array();
             $row['data'] = implode($row_data);
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fputcsv -- Using php://output stream for direct CSV download
             fputcsv($fp, $row);
             $i++;
         }
 
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Using php://output stream for direct CSV download
         fclose($fp);
         die();
     }
@@ -806,7 +898,8 @@ class SLL_List_Table extends WP_List_Table
         $item = apply_filters('sll-output-data', $item);
 
         //unset existing filter and pagination
-        $args = wp_parse_args( parse_url($_SERVER["REQUEST_URI"], PHP_URL_QUERY) );
+        $current_url = isset($_SERVER['REQUEST_URI']) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+        $args = wp_parse_args( wp_parse_url( $current_url, PHP_URL_QUERY ) );
         unset($args['filter']);
         unset($args['paged']);
 
@@ -815,15 +908,23 @@ class SLL_List_Table extends WP_List_Table
             case 'uid':
             case 'time':
             case 'ip':
-                return $item[$column_name];
+                return esc_html($item[$column_name]);
             case 'user_login':
-                return "<a href='" . add_query_arg( array('filter' => $item[$column_name]), menu_page_url('login_log', false) ) . "' title='" . __('Filter log by this name', 'sll') . "'>{$item[$column_name]}</a>";
+                $url = esc_url(add_query_arg( array('filter' => $item[$column_name]), menu_page_url('login_log', false) ));
+                $allowed_html = array(
+                    'a' => array(
+                        'href' => array(),
+                        'title' => array(),
+                    ),
+                );
+                return wp_kses("<a href='" . $url . "' title='" . esc_attr__('Filter log by this name', 'simple-login-log') . "'>" . esc_html($item[$column_name]) . "</a>", $allowed_html);
             case 'name':
                 $user_info = get_userdata($item['uid']);
-                return ( is_object($user_info) ) ? $user_info->first_name .  " " . $user_info->last_name : false;
+                return ( is_object($user_info) ) ? esc_html($user_info->first_name) .  " " . esc_html($user_info->last_name) : '';
             case 'login_result':
                 if ( '' == $item[$column_name]) return '';
-                return ( '1' == $item[$column_name] ) ? __($this->data_labels['Successful'], 'sll') : '<div class="login-failed">' . __($this->data_labels['Failed'], 'sll') . '</div>';
+                $allowed_html = array('div' => array('class' => array()));
+                return ( '1' == $item[$column_name] ) ? esc_html($this->data_labels['Successful']) : wp_kses('<div class="login-failed">' . esc_html($this->data_labels['Failed']) . '</div>', $allowed_html);
             case 'user_role':
                 if( !$item['uid'] )
                     return;
@@ -833,14 +934,21 @@ class SLL_List_Table extends WP_List_Table
                 $user = new WP_User( $item['uid'] );
                 if ( !empty( $user->roles ) && is_array( $user->roles ) )
                 {
+                    $roles = array();
                     foreach($user->roles as $role)
                     {
-
                         $roleName = isset($wp_roles->roles[$role]['name']) ? $wp_roles->roles[$role]['name'] : $role;
-
-                        $roles[] = "<a href='" . add_query_arg( array('user_role' => $role), menu_page_url('login_log', false) ) . "' title='" . __('Filter log by User Role', 'sll') . "'>{$roleName}</a>";
+                        $url = esc_url(add_query_arg( array('user_role' => $role), menu_page_url('login_log', false) ));
+                        $roles[] = "<a href='" . $url . "' title='" . esc_attr__('Filter log by User Role', 'simple-login-log') . "'>" . esc_html($roleName) . "</a>";
                     }
-                    return implode(', ', $roles);
+                    // Allow anchor tags with href and title attributes
+                    $allowed_html = array(
+                        'a' => array(
+                            'href' => array(),
+                            'title' => array(),
+                        ),
+                    );
+                    return wp_kses(implode(', ', $roles), $allowed_html);
                 }
                 break;
             case 'data':
@@ -850,19 +958,27 @@ class SLL_List_Table extends WP_List_Table
                     $output = '';
                     foreach($data as $k => $v)
                     {
-                        $output .= $k .': '. $v .'<br />';
+                        $output .= esc_html($k) .': '. esc_html($v) .'<br />';
                     }
 
-                    $output = ( isset($_GET['mode']) && 'excerpt' == $_GET['mode'] ) ? $output : substr($output, 0, 50) . '...';
+                    // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading mode parameter for display, read-only
+                    $mode_value = isset($_GET['mode']) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : '';
+                    $output = ( 'excerpt' === $mode_value ) ? $output : substr($output, 0, 50) . '...';
+
+                    // Allow only br and div tags with specific class for the output
+                    $allowed_html = array(
+                        'br' => array(),
+                        'div' => array('class' => array()),
+                    );
 
                     if( isset($data[$this->data_labels['Login']]) && $data[$this->data_labels['Login']] == $this->data_labels['Failed'] ){
-                        return '<div class="login-failed">' . $output . '</div>';
+                        return wp_kses('<div class="login-failed">' . $output . '</div>', $allowed_html);
                     }
-                    return $output;
+                    return wp_kses($output, $allowed_html);
                 }
                 break;
             default:
-                return $item[$column_name];
+                return esc_html($item[$column_name]);
         }
     }
 
@@ -871,15 +987,15 @@ class SLL_List_Table extends WP_List_Table
     {
         global $status;
         $columns = array(
-            'id'            => __('#', 'sll'),
-            'uid'           => __('User ID', 'sll'),
-            'user_login'    => __('Username', 'sll'),
-            'user_role'     => __('User Role', 'sll'),
-            'name'          => __('Name', 'sll'),
-            'time'          => __('Time', 'sll'),
-            'ip'            => __('IP Address', 'sll'),
-            'login_result'  => __('Login Result', 'sll'),
-            'data'          => __('Data', 'sll'),
+            'id'            => __('#', 'simple-login-log'),
+            'uid'           => __('User ID', 'simple-login-log'),
+            'user_login'    => __('Username', 'simple-login-log'),
+            'user_role'     => __('User Role', 'simple-login-log'),
+            'name'          => __('Name', 'simple-login-log'),
+            'time'          => __('Time', 'simple-login-log'),
+            'ip'            => __('IP Address', 'simple-login-log'),
+            'login_result'  => __('Login Result', 'simple-login-log'),
+            'data'          => __('Data', 'simple-login-log'),
         );
         return $columns;
     }
@@ -901,29 +1017,37 @@ class SLL_List_Table extends WP_List_Table
     function get_views()
     {
         //creating class="current" variables
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading result parameter for display, read-only
         if( !isset($_GET['result']) ){
             $all = 'class="current"';
             $success = '';
             $failed = '';
         }else{
             $all = '';
-            $success = ( '1' == $_GET['result'] ) ? 'class="current"' : '';
-            $failed = ( '0' == $_GET['result'] ) ? 'class="current"' : '';
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading result parameter for display, read-only
+            $result_value = isset($_GET['result']) ? sanitize_text_field( wp_unslash( $_GET['result'] ) ) : '';
+            $success = ( '1' === $result_value ) ? 'class="current"' : '';
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading result parameter for display, read-only
+            $failed = ( '0' === $result_value ) ? 'class="current"' : '';
         }
 
 
 
         //if date filter is set, adjust views label to reflect the date
-        $date_label = false;
+        $date_label = '';
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading datefilter parameter for display, read-only
         if( isset($_GET['datefilter']) && !empty($_GET['datefilter']) ){
-            $year = substr($_GET['datefilter'], 0, 4);
-            $month = substr($_GET['datefilter'], -2);
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameter, already checked with isset above
+            $datefilter_value = sanitize_text_field( wp_unslash( $_GET['datefilter'] ) );
+            $year = substr($datefilter_value, 0, 4);
+            $month = substr($datefilter_value, -2);
             $timestamp = mktime(0, 0, 0, $month, 1, $year);
-            $date_label = date('F', $timestamp) . ' ' . $year . ' ';
+            $date_label = esc_html(date_i18n('F', $timestamp)) . ' ' . esc_html($year) . ' ';
         }
 
         //get args from the URL
-        $args = wp_parse_args( parse_url($_SERVER["REQUEST_URI"], PHP_URL_QUERY) );
+        $current_url = isset($_SERVER['REQUEST_URI']) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+        $args = wp_parse_args( wp_parse_url( $current_url, PHP_URL_QUERY ) );
         //the only arguments we can pass are mode and datefilter
         $param = false;
         if( isset($args['mode']) )
@@ -938,9 +1062,9 @@ class SLL_List_Table extends WP_List_Table
 
         //definition for views array
         $views = array(
-            'all' => $date_label . __('Login Results', 'sll') . ': <a ' . $all . ' href="' . $url . '">' . __('All', 'sll') . '</a>' . '(' .$this->get('allTotal') . ')',
-            'success' => '<a ' . $success . ' href="' . $url . '&result=1">' . __('Successful', 'sll') . '</a> (' . $this->get('successTotal') . ')',
-            'failed' => '<a ' . $failed . ' href="' . $url . '&result=0">' . __('Failed', 'sll') . '</a>' . '(' . $this->get('failedTotal') . ')',
+            'all' => $date_label . esc_html__('Login Results', 'simple-login-log') . ': <a ' . $all . ' href="' . esc_url($url) . '">' . esc_html__('All', 'simple-login-log') . '</a>' . '(' . absint($this->get('allTotal')) . ')',
+            'success' => '<a ' . $success . ' href="' . esc_url($url) . '&result=1">' . esc_html__('Successful', 'simple-login-log') . '</a> (' . absint($this->get('successTotal')) . ')',
+            'failed' => '<a ' . $failed . ' href="' . esc_url($url) . '&result=0">' . esc_html__('Failed', 'simple-login-log') . '</a>' . '(' . absint($this->get('failedTotal')) . ')',
         );
 
         return $views;
@@ -972,11 +1096,17 @@ class SLL_List_Table extends WP_List_Table
         $where2 = 'WHERE ' . implode(' AND ', $where2);
         $where3 = 'WHERE ' . implode(' AND ', $where3);
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, $where uses esc_sql()
         $sql1 = "SELECT count(*) FROM {$sll->table} {$where1}";
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $where clauses are built with esc_sql() in make_where_query()
         $allTotal = $wpdb->get_var($sql1);
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, $where uses esc_sql()
         $sql2 = "SELECT count(*) FROM {$sll->table} {$where2}";
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $where clauses are built with esc_sql() in make_where_query()
         $successTotal = $wpdb->get_var($sql2);
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is internal property, $where uses esc_sql()
         $sql3 = "SELECT count(*) FROM {$sll->table} {$where3}";
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $where clauses are built with esc_sql() in make_where_query()
         $failedTotal = $wpdb->get_var($sql3);
 
         $this->set('allTotal', $allTotal);
@@ -994,8 +1124,10 @@ class SLL_List_Table extends WP_List_Table
 
         $offset = $per_page * ($this->get_pagenum() - 1);
 
-        $orderby = (isset($_REQUEST['orderby']) && !empty($_REQUEST['orderby'])) ? $_REQUEST['orderby'] : false;
-        $order = (isset($_REQUEST['order']) && !empty($_REQUEST['order'])) ? $_REQUEST['order'] : false;
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading orderby parameter for sorting, read-only, validated against whitelist
+        $orderby = (isset($_REQUEST['orderby']) && !empty($_REQUEST['orderby'])) ? sanitize_text_field( wp_unslash( $_REQUEST['orderby'] ) ) : false;
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading order parameter for sorting, read-only, validated against whitelist
+        $order = (isset($_REQUEST['order']) && !empty($_REQUEST['order'])) ? sanitize_text_field( wp_unslash( $_REQUEST['order'] ) ) : false;
 
         $this->items = $sll->log_get_data($orderby, $order, $per_page, $offset);
 
@@ -1084,16 +1216,22 @@ class SLL_List_Table extends WP_List_Table
          * in your own package classes.
          */
 
-        if (isset($_GET['result']) && $_GET['result'] == '1')
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading result parameter for pagination count, read-only
+        $result_filter = isset($_GET['result']) ? sanitize_text_field( wp_unslash( $_GET['result'] ) ) : '';
+        if ( '1' === $result_filter )
         {
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $where2 is built with esc_sql() in make_where_query()
             $total_items = $wpdb->get_var("SELECT COUNT(*) FROM $sll->table {$where2}");
         }
-        else if(isset($_GET['result']) && $_GET['result'] == '0')
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading result parameter for pagination count, read-only
+        else if( '0' === $result_filter )
         {
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $where3 is built with esc_sql() in make_where_query()
             $total_items = $wpdb->get_var("SELECT COUNT(*) FROM $sll->table {$where3}");
         }
         else
         {
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- No user input, table property is internal
             $total_items = $wpdb->get_var("SELECT COUNT(*) FROM $sll->table");
         }
 
@@ -1126,3 +1264,4 @@ class SLL_List_Table extends WP_List_Table
     }
 
 }
+
