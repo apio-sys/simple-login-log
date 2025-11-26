@@ -4,7 +4,6 @@
   Plugin URI: https://apio.systems
   Description: This plugin keeps a log of WordPress user logins. Offers user filtering and export features.
   Version: 2.0.0
-  Author: Max Chirkov
   Author: Joris Le Blansch
   Author URI: https://apio.systems
   License: MIT

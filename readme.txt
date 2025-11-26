@@ -134,25 +134,6 @@ Screen Options are available at the top of the Login Log page. Click on the *Scr
 
 == Other Notes ==
 
-= Filters =
-
-** Log Output Within the Table **
-
-*sll-output-data* - filters table row array where array keys are column names and values is the output
-For example, we can use this filter to link IP addresses to a geo-location service:
-`
-<?php
-add_filter( 'sll-output-data', 'link_location_by_ip' );
-function link_location_by_ip($item){
-
-	//$item is a single row for columns with their values
-
-	$item['ip'] = sprintf('<a target="_blank"  href="http://infosniper.net/index.php?ip_address=%1$s&map_source=3&two_maps=1&overview_map=1&lang=1&map_type=1&zoom_level=11">%1$s</a>', $item['ip']);
-	return $item;
-}
-?>
-`
-
 = Translation =
 
 If you would like to contribute, the POT file is available in the *languages* folder. Translation file name convention is *sll-{locale}.mo*, where {locale} is the locale of your language. Fore example, Russian file name would be *sll-ru_RU.po*.
