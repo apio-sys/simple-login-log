@@ -18,6 +18,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
  class SimpleLoginLog
  {
+    const VERSION = '2.0.0';
     private $db_ver = "1.3";
     public $table = 'simple_login_log';
     private $log_duration = null; //days
@@ -34,47 +35,37 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
         if ( is_multisite() )
         {
-            // get main site's table prefix
             $main_prefix = $wpdb->get_blog_prefix(1);
             $this->table = $main_prefix . $this->table;
         }
         else
         {
-            // non-multisite - regular table name
             $this->table = $wpdb->prefix . $this->table;
         }
         $this->opt = get_option($this->opt_name);
         
-        // Ensure $this->opt is always an array
         if ( ! is_array( $this->opt ) ) {
             $this->opt = array();
         }
 
-        //Get plugin's DB version
         $this->installed_ver = get_option( "sll_db_ver" );
 
         add_action( 'admin_menu', array($this, 'sll_admin_menu') );
         add_action('admin_init', array($this, 'settings_api_init') );
         add_action('admin_head', array($this, 'screen_options') );
 
-        //check if db needs to be upgraded after plugin update was completed
         add_action('plugins_loaded', array($this, 'update_db_check') );
 
-        //Init login actions
         add_action( 'init', array($this, 'init_login_actions') );
 
-        //Init CSV Export
         add_action('admin_init', array($this, 'init_csv_export') );
         add_action('admin_init', array($this, 'delete_all') );
 
-        //Style the log table
-        add_action( 'admin_head', array($this, 'admin_header') );
+        add_action( 'admin_enqueue_scripts', array($this, 'admin_enqueue_styles') );
 
-        //Initialize scheduled events (when some one visits site in front-end)
         add_action( 'wp', array($this, 'init_scheduled_events') );
         add_action('truncate_sll', array($this, 'cron') );
 
-        //For translation purposes
         $this->data_labels = array(
             'Successful'        => __('Successful', 'simple-login-log'),
             'Failed'            => __('Failed', 'simple-login-log'),
@@ -92,67 +83,53 @@ if( !class_exists( 'SimpleLoginLog' ) )
             'data'              => __('Data', 'simple-login-log'),
         );
 
-        //Deactivation hook
         register_deactivation_hook(__FILE__, array($this, 'deactivation') );
 
     }
-
 
      function set($name, $value)
      {
          $this->values[$name] = $value;
      }
 
-
      function get($name)
      {
          return (isset($this->values[$name])) ? $this->values[$name] : false;
      }
-
 
     function cron()
     {
         SimpleLoginLog::truncate_log();
     }
 
-
     function screen_options()
     {
-
-        //execute only on login_log page, othewise return null
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Checking page parameter for admin screen, read-only
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $page = ( isset($_GET['page']) ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : false;
         if( 'login_log' != $page )
             return;
 
         $current_screen = get_current_screen();
 
-        //define options
         $per_page_field = 'per_page';
         $per_page_option = $current_screen->id . '_' . $per_page_field;
 
-        //Save options that were applied
-        // phpcs:disable WordPress.Security.NonceVerification.Recommended -- WordPress handles nonce verification for screen options internally
+        // phpcs:disable WordPress.Security.NonceVerification.Recommended
         if( isset($_REQUEST['wp_screen_options']) && isset($_REQUEST['wp_screen_options']['value']) )
         {
             update_option( $per_page_option, absint( wp_unslash( $_REQUEST['wp_screen_options']['value'] ) ) );
         }
         // phpcs:enable WordPress.Security.NonceVerification.Recommended
 
-        //prepare options for display
-
-        //if per page option is not set, use default
         $per_page_val = get_option($per_page_option, 20);
         $args = array('label' => __('Records', 'simple-login-log'), 'default' => $per_page_val );
 
-        //display options
         add_screen_option($per_page_field, $args);
         $_per_page = get_option('users_page_login_log_per_page');
 
         //needs to be initialized early enough to pre-fill screen options section in the upper (hidden) area.
         $this->log_table = new SLL_List_Table;
     }
-
 
     function init_login_actions()
     {
@@ -168,20 +145,17 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
     }
 
-
     function login_success( $user_login )
     {
         $this->login_success = 1;
         $this->login_action( $user_login );
     }
 
-
     function login_failed( $user_login )
     {
         $this->login_success = 0;
         $this->login_action( $user_login );
     }
-
 
     function init_scheduled_events()
     {
@@ -200,7 +174,6 @@ if( !class_exists( 'SimpleLoginLog' ) )
         }
     }
 
-
     function deactivation()
     {
         wp_clear_scheduled_hook('truncate_sll');
@@ -210,7 +183,6 @@ if( !class_exists( 'SimpleLoginLog' ) )
         wp_clear_scheduled_hook('SimpleLoginLog::truncate_log');
     }
 
-
     function truncate_log()
     {
         global $wpdb;
@@ -219,18 +191,18 @@ if( !class_exists( 'SimpleLoginLog' ) )
         $log_duration = (int)$opt['log_duration'];
 
         if( 0 < $log_duration ){
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
             $wpdb->query(
                 $wpdb->prepare(
-                    "DELETE FROM `{$this->table}` WHERE time < DATE_SUB(CURDATE(), INTERVAL %d DAY)",
+                    'DELETE FROM %i WHERE time < DATE_SUB(CURDATE(), INTERVAL %d DAY)',
+                    $this->table,
                     $log_duration
                 )
             );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         }
 
     }
-
 
      function delete_all()
      {
@@ -243,19 +215,17 @@ if( !class_exists( 'SimpleLoginLog' ) )
              return;
          }
 
-         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
          $result = $wpdb->query(
-             $wpdb->prepare( "DELETE FROM `{$this->table}` WHERE 1 = %d", 1 )
+             $wpdb->prepare( 'DELETE FROM %i WHERE 1 = %d', $this->table, 1 )
          );
-         // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+         // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
          if ($result)
          {
              $this->set('deleted', true);
          }
      }
-
-
 
     /**
     * Runs via plugin activation hook & creates a database
@@ -266,7 +236,6 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
         if( $this->installed_ver != $this->db_ver )
         {
-            //if table does't exist, create a new one
             // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
             $table_exists = $wpdb->get_var(
                 $wpdb->prepare( "SHOW TABLES LIKE %s", $this->table )
@@ -297,9 +266,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             }
         }
 
-
     }
-
 
     /**
     * Checks if the installed database version is the same as the db version of the current plugin
@@ -324,7 +291,6 @@ if( !class_exists( 'SimpleLoginLog' ) )
         }
     }
 
-
     /**
     * DB version specific updates
     */
@@ -335,12 +301,12 @@ if( !class_exists( 'SimpleLoginLog' ) )
          */
         global $wpdb;
 
-        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         $fields = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM `{$this->table}` LIMIT %d", 1 ),
+            $wpdb->prepare( 'SELECT * FROM %i LIMIT %d', $this->table, 1 ),
             'ARRAY_A'
         );
-        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
         if( !$fields ){
             $this->install();
@@ -351,21 +317,21 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
         if( !array_search('login_result', $field_names) )
         {
-            //add the new field since it doesn't exist
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
             $insert = $wpdb->query(
-                "ALTER TABLE `{$this->table}` ADD COLUMN login_result varchar(1) NOT NULL AFTER ip, ADD INDEX (login_result)"
+                $wpdb->prepare(
+                    'ALTER TABLE %i ADD COLUMN login_result varchar(1) NOT NULL AFTER ip, ADD INDEX (login_result)',
+                    $this->table
+                )
             );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-            //update version record if it has been updated
             if( false !== $insert )
                 update_option( "sll_db_ver", $this->db_ver );
 
         }
 
     }
-
 
     function db_update_1_2()
     {
@@ -374,12 +340,12 @@ if( !class_exists( 'SimpleLoginLog' ) )
          */
         global $wpdb;
 
-        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         $fields = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM `{$this->table}` LIMIT %d", 1 ),
+            $wpdb->prepare( 'SELECT * FROM %i LIMIT %d', $this->table, 1 ),
             'ARRAY_A'
         );
-        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
         if( !$fields ){
             $this->install();
@@ -390,20 +356,20 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
         if( !array_search('user_role', $field_names) )
         {
-            //add the new field since it doesn't exist
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
             $insert = $wpdb->query(
-                "ALTER TABLE `{$this->table}` ADD COLUMN user_role varchar(30) NOT NULL AFTER user_login"
+                $wpdb->prepare(
+                    'ALTER TABLE %i ADD COLUMN user_role varchar(30) NOT NULL AFTER user_login',
+                    $this->table
+                )
             );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-            //update version record if it has been updated
             if( false !== $insert )
                 update_option( "sll_db_ver", $this->db_ver );
 
         }
     }
-
 
      function db_update_1_3()
      {
@@ -412,30 +378,31 @@ if( !class_exists( 'SimpleLoginLog' ) )
           */
          global $wpdb;
 
-         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
          $fields = $wpdb->get_row(
-             $wpdb->prepare( "SELECT * FROM `{$this->table}` LIMIT %d", 1 ),
+             $wpdb->prepare( 'SELECT * FROM %i LIMIT %d', $this->table, 1 ),
              'ARRAY_A'
          );
-         // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+         // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
          if( !$fields ){
              $this->install();
              return;
          }
 
-         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
          $insert = $wpdb->query(
-             "ALTER TABLE `{$this->table}` MODIFY user_role varchar(255) NOT NULL"
+             $wpdb->prepare(
+                 'ALTER TABLE %i MODIFY user_role varchar(255) NOT NULL',
+                 $this->table
+             )
          );
-         // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+         // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-         //update version record if it has been updated
          if( false !== $insert )
              update_option( "sll_db_ver", $this->db_ver );
 
      }
-
 
     //Initializing Settings
     function settings_api_init()
@@ -446,7 +413,6 @@ if( !class_exists( 'SimpleLoginLog' ) )
         register_setting( 'general', 'simple_login_log', array($this, 'sanitize_settings') );
 
     }
-
 
     function sanitize_settings( $input )
     {
@@ -468,18 +434,15 @@ if( !class_exists( 'SimpleLoginLog' ) )
         return $sanitized;
     }
 
-
     function sll_admin_menu()
     {
         add_submenu_page( 'users.php', __('Simple Login Log', 'simple-login-log'), __('Login Log', 'simple-login-log'), 'list_users', 'login_log', array($this, 'log_manager') );
     }
 
-
     function sll_settings()
     {
         //content that goes before the fields output
     }
-
 
     function field_log_duration()
     {
@@ -490,13 +453,12 @@ if( !class_exists( 'SimpleLoginLog' ) )
         <?php
 
         //since we're on the General Settings page - update cron schedule if settings has been updated
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- WordPress Settings API handles nonce verification
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         if( isset($_REQUEST['settings-updated']) ){
             wp_clear_scheduled_hook('truncate_sll');
             //$this->init_scheduled_events();
         }
     }
-
 
     function field_log_failed_attempts()
     {
@@ -504,19 +466,22 @@ if( !class_exists( 'SimpleLoginLog' ) )
         echo '<input type="checkbox" name="simple_login_log[failed_attempts]" value="1" ' . checked( $failed_attempts, 1, false ) . ' /> ' . esc_html__('Logs failed attempts where user name and password are entered. Will not log if at least one of the mentioned fields is empty.', 'simple-login-log');
     }
 
-
-    function admin_header()
+    /**
+     * Enqueue admin styles for the login log page.
+     *
+     * @param string $hook_suffix The current admin page hook suffix.
+     */
+    function admin_enqueue_styles( $hook_suffix )
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Checking page parameter for admin screen, read-only
-        $page = ( isset($_GET['page']) ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : false;
-        if( 'login_log' != $page )
+        // Only load on the login_log page (under Users menu)
+        if ( 'users_page_login_log' !== $hook_suffix ) {
             return;
+        }
 
-        echo '<style type="text/css">';
-        echo 'table.users { table-layout: auto; }';
-        echo '</style>';
+        wp_register_style( 'simple-login-log-admin', false, array(), self::VERSION );
+        wp_enqueue_style( 'simple-login-log-admin' );
+        wp_add_inline_style( 'simple-login-log-admin', 'table.users { table-layout: auto; }' );
     }
-
 
     //Catch messages on successful login
     function login_action($user_login)
@@ -527,13 +492,12 @@ if( !class_exists( 'SimpleLoginLog' ) )
         $uid = ($userdata && $userdata->ID) ? $userdata->ID : 0;
 
         $data[$this->data_labels['Login']] = ( 1 == $this->login_success ) ? $this->data_labels['Successful'] : $this->data_labels['Failed'];
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading redirect_to from WordPress login, no nonce needed for logging
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         if ( isset( $_REQUEST['redirect_to'] ) ) { $data[$this->data_labels['Login Redirect']] = sanitize_text_field( wp_unslash( $_REQUEST['redirect_to'] ) ); }
         $data[$this->data_labels['User Agent']] = isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
 
         $serialized_data = serialize($data);
 
-        //get user role
         $user_role = '';
         if( $uid ){
             $user = new WP_User( $uid );
@@ -541,7 +505,6 @@ if( !class_exists( 'SimpleLoginLog' ) )
                 $user_role = implode(', ', $user->roles);
             }
         }
-
 
         $values = array(
             'uid'           => $uid,
@@ -558,152 +521,370 @@ if( !class_exists( 'SimpleLoginLog' ) )
         $this->save_data($values, $format);
     }
 
-
     function save_data($values, $format)
     {
         global $wpdb;
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- INSERT into custom log table, this is the core functionality of the plugin
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
         $wpdb->insert( $this->table, $values, $format );
     }
 
-
     /**
-     * Build WHERE clause components for prepared statements.
-     * Returns an array with 'clauses' (SQL fragments with placeholders) and 'values' (values to bind).
+     * Build filter data for WHERE clause.
+     * Returns sanitized filter values that can be used to build queries.
      *
-     * @return array{clauses: string[], values: array}
+     * @return array{filter: string|false, user_role: string|false, result: string|false, year: int|false, month: int|false}
      */
-    function make_where_query()
+    function get_filter_values()
     {
-        $clauses = array();
-        $values = array();
+        $filters = array(
+            'filter'    => false,
+            'user_role' => false,
+            'result'    => false,
+            'year'      => false,
+            'month'     => false,
+        );
 
-        // phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only filter parameters from URL for display filtering
-        if( isset($_GET['filter']) && '' !== $_GET['filter'] )
-        {
-            $filter = sanitize_text_field( wp_unslash( $_GET['filter'] ) );
-            $clauses[] = "(user_login LIKE %s OR ip LIKE %s)";
-            $values[] = '%' . $GLOBALS['wpdb']->esc_like( $filter ) . '%';
-            $values[] = '%' . $GLOBALS['wpdb']->esc_like( $filter ) . '%';
+        // phpcs:disable WordPress.Security.NonceVerification.Recommended
+        if ( isset($_GET['filter']) && '' !== $_GET['filter'] ) {
+            $filters['filter'] = sanitize_text_field( wp_unslash( $_GET['filter'] ) );
         }
-        if( isset($_GET['user_role']) && '' !== $_GET['user_role'] )
-        {
-            $user_role = sanitize_text_field( wp_unslash( $_GET['user_role'] ) );
-            $clauses[] = "user_role LIKE %s";
-            $values[] = '%' . $GLOBALS['wpdb']->esc_like( $user_role ) . '%';
+        if ( isset($_GET['user_role']) && '' !== $_GET['user_role'] ) {
+            $filters['user_role'] = sanitize_text_field( wp_unslash( $_GET['user_role'] ) );
         }
-        if( isset($_GET['result']) && '' !== $_GET['result'] )
-        {
-            $result = sanitize_text_field( wp_unslash( $_GET['result'] ) );
-            $clauses[] = "login_result = %s";
-            $values[] = $result;
+        if ( isset($_GET['result']) && '' !== $_GET['result'] ) {
+            $filters['result'] = sanitize_text_field( wp_unslash( $_GET['result'] ) );
         }
-        if( isset($_GET['datefilter']) && '' !== $_GET['datefilter'] )
-        {
+        if ( isset($_GET['datefilter']) && '' !== $_GET['datefilter'] ) {
             $datefilter = sanitize_text_field( wp_unslash( $_GET['datefilter'] ) );
             // Validate format: YYYYMM
             if ( preg_match( '/^(\d{4})(\d{2})$/', $datefilter, $matches ) ) {
-                $clauses[] = "YEAR(time) = %d AND MONTH(time) = %d";
-                $values[] = (int) $matches[1];
-                $values[] = (int) $matches[2];
+                $filters['year'] = (int) $matches[1];
+                $filters['month'] = (int) $matches[2];
             }
         }
         // phpcs:enable WordPress.Security.NonceVerification.Recommended
 
-        return array(
-            'clauses' => $clauses,
-            'values'  => $values,
-        );
+        return $filters;
     }
 
-
     /**
-     * Build WHERE clause components specifically for date filter only (used for stats).
-     * Returns an array with 'clauses' (SQL fragments with placeholders) and 'values' (values to bind).
+     * Get date filter values only (used for stats).
      *
-     * @return array{clauses: string[], values: array}
+     * @return array{year: int|false, month: int|false}
      */
-    function make_datefilter_where_query()
+    function get_datefilter_values()
     {
-        $clauses = array();
-        $values = array();
+        $filters = array(
+            'year'  => false,
+            'month' => false,
+        );
 
-        // phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only filter parameters from URL for display filtering
-        if( isset($_GET['datefilter']) && '' !== $_GET['datefilter'] )
-        {
+        // phpcs:disable WordPress.Security.NonceVerification.Recommended
+        if ( isset($_GET['datefilter']) && '' !== $_GET['datefilter'] ) {
             $datefilter = sanitize_text_field( wp_unslash( $_GET['datefilter'] ) );
             // Validate format: YYYYMM
             if ( preg_match( '/^(\d{4})(\d{2})$/', $datefilter, $matches ) ) {
-                $clauses[] = "YEAR(time) = %d AND MONTH(time) = %d";
-                $values[] = (int) $matches[1];
-                $values[] = (int) $matches[2];
+                $filters['year'] = (int) $matches[1];
+                $filters['month'] = (int) $matches[2];
             }
         }
         // phpcs:enable WordPress.Security.NonceVerification.Recommended
 
-        return array(
-            'clauses' => $clauses,
-            'values'  => $values,
-        );
+        return $filters;
     }
 
+    /**
+     * Check if any filters are active.
+     *
+     * @return bool
+     */
+    function has_active_filters()
+    {
+        $filters = $this->get_filter_values();
+        return ( $filters['filter'] !== false || $filters['user_role'] !== false || 
+                 $filters['result'] !== false || $filters['year'] !== false );
+    }
+
+    /**
+     * Get total count of records with current filters applied.
+     *
+     * @return int
+     */
+    function get_total_filtered_count()
+    {
+        global $wpdb;
+
+        $filters = $this->get_filter_values();
+        $table = $this->table;
+
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        if ( $filters['filter'] !== false && $filters['user_role'] !== false && $filters['result'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filter_like, $filter_like, $role_like, $filters['result'], $filters['year'], $filters['month'])
+            );
+        } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false && $filters['result'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND login_result = %s",
+                    $table, $filter_like, $filter_like, $role_like, $filters['result'])
+            );
+        } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filter_like, $filter_like, $role_like, $filters['year'], $filters['month'])
+            );
+        } elseif ( $filters['filter'] !== false && $filters['result'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filter_like, $filter_like, $filters['result'], $filters['year'], $filters['month'])
+            );
+        } elseif ( $filters['user_role'] !== false && $filters['result'] !== false && $filters['year'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE user_role LIKE %s AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $role_like, $filters['result'], $filters['year'], $filters['month'])
+            );
+        } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s",
+                    $table, $filter_like, $filter_like, $role_like)
+            );
+        } elseif ( $filters['filter'] !== false && $filters['result'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND login_result = %s",
+                    $table, $filter_like, $filter_like, $filters['result'])
+            );
+        } elseif ( $filters['filter'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filter_like, $filter_like, $filters['year'], $filters['month'])
+            );
+        } elseif ( $filters['user_role'] !== false && $filters['result'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE user_role LIKE %s AND login_result = %s",
+                    $table, $role_like, $filters['result'])
+            );
+        } elseif ( $filters['user_role'] !== false && $filters['year'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE user_role LIKE %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $role_like, $filters['year'], $filters['month'])
+            );
+        } elseif ( $filters['result'] !== false && $filters['year'] !== false ) {
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filters['result'], $filters['year'], $filters['month'])
+            );
+        } elseif ( $filters['filter'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE (user_login LIKE %s OR ip LIKE %s)",
+                    $table, $filter_like, $filter_like)
+            );
+        } elseif ( $filters['user_role'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE user_role LIKE %s",
+                    $table, $role_like)
+            );
+        } elseif ( $filters['result'] !== false ) {
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE login_result = %s",
+                    $table, $filters['result'])
+            );
+        } elseif ( $filters['year'] !== false ) {
+            $count = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM %i WHERE YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filters['year'], $filters['month'])
+            );
+        } else {
+            $count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
+        }
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+        return (int) $count;
+    }
 
     function getLimit()
     {
         return ' LIMIT ' . get_option('users_page_login_log_per_page', 20);
     }
 
-
+    // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
     function log_get_data($orderby = false, $order = false, $limit = 0, $offset = 0)
     {
         global $wpdb;
 
-        // Whitelist allowed columns for ORDER BY
-        $orderCol = array(
-            'uid' => 'uid',
-            'user_login' => 'user_login',
-            'time' => 'time',
-            'ip' => 'ip'
-        );
-        
-        // Whitelist allowed directions for ORDER BY
-        $orderDir = array(
-            'asc' => 'ASC',
-            'desc'=> 'DESC'
-        );
+        // $order and $orderby are validated against strict whitelists
+        $allowed_columns = array( 'uid', 'user_login', 'time', 'ip' );
+        $orderby = in_array( $orderby, $allowed_columns, true ) ? $orderby : 'time';
+        $order = ( 'asc' === strtolower( $order ) ) ? 'ASC' : 'DESC';
 
-        $orderby = isset($orderCol[$orderby]) ? $orderCol[$orderby] : 'time';
-        $order   = isset($orderDir[$order]) ? $orderDir[$order] : 'DESC';
+        $filters = $this->get_filter_values();
+        $table = $this->table;
 
-        $where_data = $this->make_where_query();
-        $where_sql = '';
-        $query_values = array();
-
-        if( !empty($where_data['clauses']) ) {
-            $where_sql = ' WHERE ' . implode(' AND ', $where_data['clauses']);
-            $query_values = $where_data['values'];
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        if ( $filters['filter'] !== false && $filters['user_role'] !== false && $filters['result'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $filter_like, $filter_like, $role_like, $filters['result'], $filters['year'], $filters['month'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false && $filters['result'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND login_result = %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $filter_like, $filter_like, $role_like, $filters['result'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $filter_like, $filter_like, $role_like, $filters['year'], $filters['month'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false && $filters['result'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $filter_like, $filter_like, $filters['result'], $filters['year'], $filters['month'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['user_role'] !== false && $filters['result'] !== false && $filters['year'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE user_role LIKE %s AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $role_like, $filters['result'], $filters['year'], $filters['month'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $filter_like, $filter_like, $role_like, $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false && $filters['result'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND login_result = %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $filter_like, $filter_like, $filters['result'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $filter_like, $filter_like, $filters['year'], $filters['month'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['user_role'] !== false && $filters['result'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE user_role LIKE %s AND login_result = %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $role_like, $filters['result'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['user_role'] !== false && $filters['year'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE user_role LIKE %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $role_like, $filters['year'], $filters['month'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['result'] !== false && $filters['year'] !== false ) {
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $filters['result'], $filters['year'], $filters['month'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $filter_like, $filter_like, $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['user_role'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE user_role LIKE %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $role_like, $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['result'] !== false ) {
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE login_result = %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $filters['result'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['year'] !== false ) {
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $filters['year'], $filters['month'], $limit, $offset),
+                'ARRAY_A'
+            );
+        } else {
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i ORDER BY %i {$order} LIMIT %d OFFSET %d",
+                    $table, $orderby, $limit, $offset),
+                'ARRAY_A'
+            );
         }
-
-        // Add limit and offset to values
-        $query_values[] = $limit;
-        $query_values[] = $offset;
-
-        // Build the full query - orderby and order are whitelisted, table is internal
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-        $sql = "SELECT * FROM `{$this->table}`{$where_sql} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d";
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-
-        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
-        $data = $wpdb->get_results(
-            $wpdb->prepare( $sql, ...$query_values ),
-            'ARRAY_A'
-        );
-        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
         return $data;
     }
-
 
     function log_manager()
     {
@@ -722,11 +903,11 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
             echo '<div class="tablenav top">';
                 echo '<div class="alignleft actions">';
-                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- date_filter() returns wp_kses sanitized HTML
+                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
                     echo $this->date_filter();
                 echo '</div>';
 
-                // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameter for display, read-only
+                // phpcs:ignore WordPress.Security.NonceVerification.Recommended
                 $username = ( isset($_GET['filter']) ) ? sanitize_text_field( wp_unslash( $_GET['filter'] ) ) : '';
                 echo '<form method="get" class="alignright">';
                     echo '<p class="search-box">';
@@ -738,7 +919,6 @@ if( !class_exists( 'SimpleLoginLog' ) )
             echo '</div>';
             echo '<div class="tablenav top">';
 
-                //if log failed attempts is set in the settings, then output views filter
                 if( isset($this->opt['failed_attempts']) ){
                     echo '<div class="alignleft actions">';
                             $log_table->views();
@@ -746,7 +926,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
                 }
 
                 echo '<div class="alignright actions">';
-                // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading mode parameter for display, read-only
+                // phpcs:ignore WordPress.Security.NonceVerification.Recommended
                 $mode = ( isset($_GET['mode']) ) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : '';
                 $log_table->view_switcher($mode);
                 echo '</div>';
@@ -767,7 +947,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             echo '</form>';
             //if filtered results - add export filtered results button
             $where = false;
-            // phpcs:disable WordPress.Security.NonceVerification.Recommended -- Checking if filters are set for export, nonce verified during export
+            // phpcs:disable WordPress.Security.NonceVerification.Recommended
             if( isset( $_GET['filter'] ) || isset( $_GET['user_role'] ) || isset( $_GET['datefilter'] ) || isset( $_GET['result'] ) )
             {
                 $where = array();
@@ -791,19 +971,18 @@ if( !class_exists( 'SimpleLoginLog' ) )
         echo '</div>';
     }
 
-
     function date_filter()
     {
         global $wpdb;
 
-        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         $results = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT DISTINCT YEAR(time) as year, MONTH(time) as month FROM `{$this->table}` WHERE %d = %d ORDER BY YEAR(time), MONTH(time) DESC",
-                1, 1
+                'SELECT DISTINCT YEAR(time) as year, MONTH(time) as month FROM %i ORDER BY YEAR(time), MONTH(time) DESC',
+                $this->table
             )
         );
-        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
         if(!$results)
             return '';
@@ -811,10 +990,9 @@ if( !class_exists( 'SimpleLoginLog' ) )
         $option = '';
         foreach($results as $row)
         {
-            //represent month in double digits
             $timestamp = mktime(0, 0, 0, $row->month, 1, $row->year);
             $month = (strlen($row->month) == 1) ? '0' . $row->month : $row->month;
-            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading filter parameter for display, read-only
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended
             $datefilter = ( isset($_GET['datefilter']) ) ? sanitize_text_field( wp_unslash( $_GET['datefilter'] ) ) : '';
             $option .= '<option value="' . esc_attr($row->year . $month) . '" ' . selected($row->year . $month, $datefilter, false) . '>' . esc_html(date_i18n('F', $timestamp)) . ' ' . esc_html($row->year) . '</option>';
         }
@@ -844,20 +1022,17 @@ if( !class_exists( 'SimpleLoginLog' ) )
         return wp_kses($output, $allowed_html);
     }
 
-
     function init_csv_export()
     {
-        //Check if download was initiated
 
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified below with check_admin_referer()
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $download = (isset($_GET['download-login-log'])) ? sanitize_text_field( wp_unslash( $_GET['download-login-log'] ) ) : false;
 
         if($download)
         {
             check_admin_referer( 'ssl_export_log' );
 
-            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- JSON data will be decoded and sanitized
-            $where_json = ( isset($_GET['where']) && '' !== $_GET['where'] ) ? wp_unslash( $_GET['where'] ) : false;
+            $where_json = ( isset($_GET['where']) && '' !== $_GET['where'] ) ? sanitize_text_field( wp_unslash( $_GET['where'] ) ) : false;
             
             if ( $where_json ) {
                 $where = json_decode( $where_json, true );
@@ -868,75 +1043,182 @@ if( !class_exists( 'SimpleLoginLog' ) )
                 }
             }
 
-            $this->export_to_CSV( $this->make_where_query() );
+            $this->export_to_CSV( $this->get_filter_values() );
         }
     }
 
-
-    function export_to_CSV( $where_data = false ){
+    function export_to_CSV( $filters = false ){
         global $wpdb;
 
-        $where_sql = '';
-        $query_values = array();
+        $table = $this->table;
 
-        //if $where_data is set, build WHERE sql query with prepared statement
-        if( $where_data && !empty($where_data['clauses']) ) {
-            $where_sql = ' WHERE ' . implode(' AND ', $where_data['clauses']);
-            $query_values = $where_data['values'];
+        if ( ! $filters ) {
+            $filters = array(
+                'filter'    => false,
+                'user_role' => false,
+                'result'    => false,
+                'year'      => false,
+                'month'     => false,
+            );
         }
 
-        // Build query
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-        $sql = "SELECT * FROM `{$this->table}`{$where_sql}";
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-        
-        if ( !empty($query_values) ) {
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        if ( $filters['filter'] !== false && $filters['user_role'] !== false && $filters['result'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
             $data = $wpdb->get_results(
-                $wpdb->prepare( $sql, ...$query_values ),
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filter_like, $filter_like, $role_like, $filters['result'], $filters['year'], $filters['month']),
                 'ARRAY_A'
             );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false && $filters['result'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND login_result = %s",
+                    $table, $filter_like, $filter_like, $role_like, $filters['result']),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filter_like, $filter_like, $role_like, $filters['year'], $filters['month']),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false && $filters['result'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filter_like, $filter_like, $filters['result'], $filters['year'], $filters['month']),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['user_role'] !== false && $filters['result'] !== false && $filters['year'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE user_role LIKE %s AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $role_like, $filters['result'], $filters['year'], $filters['month']),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s",
+                    $table, $filter_like, $filter_like, $role_like),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false && $filters['result'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND login_result = %s",
+                    $table, $filter_like, $filter_like, $filters['result']),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false && $filters['year'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filter_like, $filter_like, $filters['year'], $filters['month']),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['user_role'] !== false && $filters['result'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE user_role LIKE %s AND login_result = %s",
+                    $table, $role_like, $filters['result']),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['user_role'] !== false && $filters['year'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE user_role LIKE %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $role_like, $filters['year'], $filters['month']),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['result'] !== false && $filters['year'] !== false ) {
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filters['result'], $filters['year'], $filters['month']),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['filter'] !== false ) {
+            $filter_like = '%' . $wpdb->esc_like( $filters['filter'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s)",
+                    $table, $filter_like, $filter_like),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['user_role'] !== false ) {
+            $role_like = '%' . $wpdb->esc_like( $filters['user_role'] ) . '%';
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE user_role LIKE %s",
+                    $table, $role_like),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['result'] !== false ) {
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE login_result = %s",
+                    $table, $filters['result']),
+                'ARRAY_A'
+            );
+        } elseif ( $filters['year'] !== false ) {
+            $data = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM %i WHERE YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $filters['year'], $filters['month']),
+                'ARRAY_A'
+            );
         } else {
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-            $data = $wpdb->get_results(
-                $wpdb->prepare( "SELECT * FROM `{$this->table}` WHERE %d = %d", 1, 1 ),
-                'ARRAY_A'
-            );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+            // No filters - get all records
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            $data = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM %i', $table ), 'ARRAY_A' );
         }
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
         if(!$data)
             return;
 
-        //date string to suffix the file nanme: month - day - year - hour - minute
         $suffix = wp_date('n-j-y_H-i');
 
-        // send response headers to the browser
         header( 'Content-Type: text/csv' );
         header( 'Content-Disposition: attachment;filename=login_log_' . $suffix . '.csv');
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Using php://output stream for direct CSV download, not writing to filesystem
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
         $fp = fopen('php://output', 'w');
 
         $i = 0;
         foreach($data as $row){
             $tmp = unserialize($row['data']);
-            //output header row
             if(0 == $i)
             {
-                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fputcsv -- Using php://output stream for direct CSV download
+                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fputcsv
                 fputcsv( $fp, array_keys($row) );
             }
             $row_data = (!empty($tmp)) ? array_map(function($key, $value) {
                 return $key.": ".$value." | ";
             }, array_keys($tmp), array_values($tmp)) : array();
             $row['data'] = implode($row_data);
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fputcsv -- Using php://output stream for direct CSV download
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fputcsv
             fputcsv($fp, $row);
             $i++;
         }
 
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Using php://output stream for direct CSV download
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
         fclose($fp);
         die();
     }
@@ -977,18 +1259,15 @@ class SLL_List_Table extends WP_List_Table
         $this->data_labels = $sll->data_labels;
     }
 
-
     function set($name, $value)
     {
         $this->sllData[$name] = $value;
     }
 
-
     function get($name)
     {
         return (isset($this->sllData[$name])) ? $this->sllData[$name] : false;
     }
-
 
     function column_default($item, $column_name)
     {
@@ -1058,7 +1337,7 @@ class SLL_List_Table extends WP_List_Table
                         $output .= esc_html($k) .': '. esc_html($v) .'<br />';
                     }
 
-                    // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading mode parameter for display, read-only
+                    // phpcs:ignore WordPress.Security.NonceVerification.Recommended
                     $mode_value = isset($_GET['mode']) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : '';
                     $output = ( 'excerpt' === $mode_value ) ? $output : substr($output, 0, 50) . '...';
 
@@ -1079,7 +1358,6 @@ class SLL_List_Table extends WP_List_Table
         }
     }
 
-
     function get_columns()
     {
         global $status;
@@ -1097,7 +1375,6 @@ class SLL_List_Table extends WP_List_Table
         return $columns;
     }
 
-
     function get_sortable_columns()
     {
         $sortable_columns = array(
@@ -1110,12 +1387,10 @@ class SLL_List_Table extends WP_List_Table
         return $sortable_columns;
     }
 
-
     // Read-only function that checks URL parameters for display state
     // phpcs:disable WordPress.Security.NonceVerification.Recommended
     function get_views()
     {
-        //creating class="current" variables
         if( !isset($_GET['result']) ){
             $all = 'class="current"';
             $success = '';
@@ -1127,9 +1402,6 @@ class SLL_List_Table extends WP_List_Table
             $failed = ( '0' === $result_value ) ? 'class="current"' : '';
         }
 
-
-
-        //if date filter is set, adjust views label to reflect the date
         $date_label = '';
         if( isset($_GET['datefilter']) && !empty($_GET['datefilter']) ){
             $datefilter_value = sanitize_text_field( wp_unslash( $_GET['datefilter'] ) );
@@ -1139,10 +1411,8 @@ class SLL_List_Table extends WP_List_Table
             $date_label = esc_html(date_i18n('F', $timestamp)) . ' ' . esc_html($year) . ' ';
         }
 
-        //get args from the URL
         $current_url = isset($_SERVER['REQUEST_URI']) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
         $args = wp_parse_args( wp_parse_url( $current_url, PHP_URL_QUERY ) );
-        //the only arguments we can pass are mode and datefilter
         $param = false;
         if( isset($args['mode']) )
             $param['mode'] = $args['mode'];
@@ -1150,11 +1420,9 @@ class SLL_List_Table extends WP_List_Table
         if( isset($args['datefilter']) )
             $param['datefilter'] = $args['datefilter'];
 
-        //creating base url for the views links
         $menu_page_url = menu_page_url('login_log', false);
         ( is_array($param) && !empty($param) ) ? $url = add_query_arg( $param, $menu_page_url) : $url = $menu_page_url;
 
-        //definition for views array
         $views = array(
             'all' => $date_label . esc_html__('Login Results', 'simple-login-log') . ': <a ' . $all . ' href="' . esc_url($url) . '">' . esc_html__('All', 'simple-login-log') . '</a>' . '(' . absint($this->get('allTotal')) . ')',
             'success' => '<a ' . $success . ' href="' . esc_url($url) . '&result=1">' . esc_html__('Successful', 'simple-login-log') . '</a> (' . absint($this->get('successTotal')) . ')',
@@ -1165,79 +1433,46 @@ class SLL_List_Table extends WP_List_Table
     }
     // phpcs:enable WordPress.Security.NonceVerification.Recommended
 
-
     function prepare_items()
     {
         global $wpdb, $sll;
 
-        // Get date filter for stats (only use datefilter, not other filters)
-        $date_where = $sll->make_datefilter_where_query();
+        $table = $sll->table;
+
+        $date_filters = $sll->get_datefilter_values();
         
-        // Build base WHERE clause for stats
-        $base_where_sql = '';
-        $base_values = array();
-        if ( !empty($date_where['clauses']) ) {
-            $base_where_sql = implode(' AND ', $date_where['clauses']);
-            $base_values = $date_where['values'];
-        }
-
-        // Count all records (with optional date filter)
-        if ( $base_where_sql ) {
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+        if ( $date_filters['year'] !== false ) {
             $allTotal = $wpdb->get_var(
                 $wpdb->prepare(
-                    "SELECT COUNT(*) FROM `{$sll->table}` WHERE {$base_where_sql}",
-                    ...$base_values
-                )
+                    "SELECT COUNT(*) FROM %i WHERE YEAR(time) = %d AND MONTH(time) = %d",
+                    $table, $date_filters['year'],
+                    $date_filters['month'])
             );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
-        } else {
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-            $allTotal = $wpdb->get_var(
-                $wpdb->prepare( "SELECT COUNT(*) FROM `{$sll->table}` WHERE %d = %d", 1, 1 )
-            );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-        }
-
-        // Count successful logins
-        $success_values = $base_values;
-        $success_values[] = '1';
-        if ( $base_where_sql ) {
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
             $successTotal = $wpdb->get_var(
                 $wpdb->prepare(
-                    "SELECT COUNT(*) FROM `{$sll->table}` WHERE {$base_where_sql} AND login_result = %s",
-                    ...$success_values
-                )
+                    "SELECT COUNT(*) FROM %i WHERE YEAR(time) = %d AND MONTH(time) = %d AND login_result = %s",
+                    $table, $date_filters['year'],
+                    $date_filters['month'],
+                    '1')
             );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
-        } else {
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-            $successTotal = $wpdb->get_var(
-                $wpdb->prepare( "SELECT COUNT(*) FROM `{$sll->table}` WHERE login_result = %s", '1' )
-            );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-        }
-
-        // Count failed logins
-        $failed_values = $base_values;
-        $failed_values[] = '0';
-        if ( $base_where_sql ) {
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
             $failedTotal = $wpdb->get_var(
                 $wpdb->prepare(
-                    "SELECT COUNT(*) FROM `{$sll->table}` WHERE {$base_where_sql} AND login_result = %s",
-                    ...$failed_values
-                )
+                    "SELECT COUNT(*) FROM %i WHERE YEAR(time) = %d AND MONTH(time) = %d AND login_result = %s",
+                    $table, $date_filters['year'],
+                    $date_filters['month'],
+                    '0')
             );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
         } else {
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-            $failedTotal = $wpdb->get_var(
-                $wpdb->prepare( "SELECT COUNT(*) FROM `{$sll->table}` WHERE login_result = %s", '0' )
+            $allTotal = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
+            $successTotal = $wpdb->get_var(
+                $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE login_result = %s', $table, '1' )
             );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+            $failedTotal = $wpdb->get_var(
+                $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE login_result = %s', $table, '0' )
+            );
         }
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
         $this->set('allTotal', $allTotal);
         $this->set('successTotal', $successTotal);
@@ -1254,9 +1489,9 @@ class SLL_List_Table extends WP_List_Table
 
         $offset = $per_page * ($this->get_pagenum() - 1);
 
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading orderby parameter for sorting, read-only, validated against whitelist
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $orderby = (isset($_REQUEST['orderby']) && !empty($_REQUEST['orderby'])) ? sanitize_text_field( wp_unslash( $_REQUEST['orderby'] ) ) : false;
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading order parameter for sorting, read-only, validated against whitelist
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $order = (isset($_REQUEST['order']) && !empty($_REQUEST['order'])) ? sanitize_text_field( wp_unslash( $_REQUEST['order'] ) ) : false;
 
         $this->items = $sll->log_get_data($orderby, $order, $per_page, $offset);
@@ -1273,7 +1508,6 @@ class SLL_List_Table extends WP_List_Table
         $hidden = ( $hidden_cols ) ? $hidden_cols : array();
         $sortable = $this->get_sortable_columns();
 
-
         /**
          * REQUIRED. Finally, we build an array to be used by the class for column
          * headers. The $this->_column_headers property takes an array which contains
@@ -1282,7 +1516,6 @@ class SLL_List_Table extends WP_List_Table
          */
         $this->_column_headers = array($columns, $hidden, $sortable);
         $columns = get_column_headers( $screen );
-
 
         /**
          * REQUIRED for pagination. Let's figure out what page the user is currently
@@ -1295,26 +1528,7 @@ class SLL_List_Table extends WP_List_Table
          * REQUIRED for pagination. Let's check how many items are in our data array.
          * Get total items based on current filters
          */
-        $where_data = $sll->make_where_query();
-        
-        if ( !empty($where_data['clauses']) ) {
-            $where_sql = implode(' AND ', $where_data['clauses']);
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
-            $total_items = $wpdb->get_var(
-                $wpdb->prepare(
-                    "SELECT COUNT(*) FROM `{$sll->table}` WHERE {$where_sql}",
-                    ...$where_data['values']
-                )
-            );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
-        } else {
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-            $total_items = $wpdb->get_var(
-                $wpdb->prepare( "SELECT COUNT(*) FROM `{$sll->table}` WHERE %d = %d", 1, 1 )
-            );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-        }
-
+        $total_items = $sll->get_total_filtered_count();
 
         /**
          * REQUIRED. We also have to register our pagination options & calculations.
