@@ -1,5 +1,5 @@
 === Simple Login Log ===
-Contributors: maxchirkov apiosys
+Contributors: maxchirkov,apiosys
 Tags: login, log, users
 Requires at least: 6.5
 Tested up to: 6.9
