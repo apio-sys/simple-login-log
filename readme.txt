@@ -58,7 +58,8 @@ Screen Options are available at the top of the Login Log page. Click on the *Scr
 * Fixed : CVE-2025-49438.
 
 **Version 1.1.3**
-* Minor fix.
+
+- Minor fix.
 
 **Version 1.1.2**
 
