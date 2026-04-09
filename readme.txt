@@ -3,8 +3,8 @@ Contributors: maxchirkov,apiosys
 Tags: login, log, users
 Requires at least: 6.5
 Tested up to: 6.9
-Stable tag: 2.0.0
-Requires PHP: 8.2
+Stable tag: 2.0.1
+Requires PHP: 7.4
 License: MIT
 License URI: https://github.com/apio-sys/simple-login-log/blob/main/LICENSE
 
@@ -23,11 +23,9 @@ Simple log of user logins. Tracks user name, time of login, IP address and brows
 
 **Translations:**
 
-- Persian [fa_IR] by [MohammadHadi Nasiri](http://taktaweb.ir/)
 - German [de_DE] by Philipp Moore
 - Russian [ru_RU]
 - Ukrainian [ua_UA]
-- Chinese [zh_CN] by [Mihuwa](http://www.mihuwa.com/)
 - French [fr_FR] by Mehdi Hamida
 
 * Author: Max Chirkov
@@ -47,11 +45,20 @@ Screen Options are available at the top of the Login Log page. Click on the *Scr
 2. Login Log Management Screen.
 
 == Changelog ==
-= 2.0.0 - 2025-11-26 =
+= Version 2.0.1 - 2026-04-09 =
+* Fixed: _load_textdomain_just_in_time error (since WP 6.7).
+* Fixed: missing_direct_file_access_protection.
+* Fixed: some minor deprecated code issues.
+* Removed incomplete/unreliable translations.
+* Reviewed and lowered PHP backwards compatibility to 7.4 still needed by some.
+* Fixed: broken CSV export functionality.
+
+= Version 2.0.0 - 2025-11-26 =
 * Code completely re-factored for modern standards.
+* Fixed : CVE-2025-49438.
 
 **Version 1.1.3**
-- Minor fix.
+* Minor fix.
 
 **Version 1.1.2**
 

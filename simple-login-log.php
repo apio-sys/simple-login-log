@@ -1,16 +1,17 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) exit;
 /*
   Plugin Name: Simple Login Log
   Plugin URI: https://apio.systems
   Description: This plugin keeps a log of WordPress user logins. Offers user filtering and export features.
-  Version: 2.0.0
+  Version: 2.0.1
   Author: Joris Le Blansch
   Author URI: https://apio.systems
   License: MIT
   License URI: https://github.com/apio-sys/simple-login-log/blob/main/LICENSE
   Text Domain: simple-login-log
   Requires at least: 6.5
-  Requires PHP: 8.2
+  Requires PHP: 7.4
  */
 
 if( !class_exists( 'SimpleLoginLog' ) )
@@ -18,7 +19,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
  class SimpleLoginLog
  {
-    const VERSION = '2.0.0';
+    const VERSION = '2.0.1';
     private $db_ver = "1.3";
     public $table = 'simple_login_log';
     private $log_duration = null; //days
@@ -28,6 +29,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
     public $data_labels = array();
     private $installed_ver = null;
     private $values;
+    private $log_table = null;
 
     function __construct()
     {
@@ -56,6 +58,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
         add_action('plugins_loaded', array($this, 'update_db_check') );
 
+        add_action( 'init', array($this, 'load_textdomain') );
         add_action( 'init', array($this, 'init_login_actions') );
 
         add_action('admin_init', array($this, 'init_csv_export') );
@@ -66,6 +69,12 @@ if( !class_exists( 'SimpleLoginLog' ) )
         add_action( 'wp', array($this, 'init_scheduled_events') );
         add_action('truncate_sll', array($this, 'cron') );
 
+        register_deactivation_hook(__FILE__, array($this, 'deactivation') );
+
+    }
+
+    function load_textdomain()
+    {
         $this->data_labels = array(
             'Successful'        => __('Successful', 'simple-login-log'),
             'Failed'            => __('Failed', 'simple-login-log'),
@@ -82,9 +91,6 @@ if( !class_exists( 'SimpleLoginLog' ) )
             'login_result'      => __('Login Result', 'simple-login-log'),
             'data'              => __('Data', 'simple-login-log'),
         );
-
-        register_deactivation_hook(__FILE__, array($this, 'deactivation') );
-
     }
 
      function set($name, $value)
@@ -1194,10 +1200,10 @@ if( !class_exists( 'SimpleLoginLog' ) )
         if(!$data)
             return;
 
-        $suffix = wp_date('n-j-y_H-i');
+        $suffix = wp_date('Ymd_Hi');
 
         header( 'Content-Type: text/csv' );
-        header( 'Content-Disposition: attachment;filename=login_log_' . $suffix . '.csv');
+        header( 'Content-Disposition: attachment;filename=simple-login-log_' . $suffix . '.csv');
         // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
         $fp = fopen('php://output', 'w');
 
@@ -1207,14 +1213,14 @@ if( !class_exists( 'SimpleLoginLog' ) )
             if(0 == $i)
             {
                 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fputcsv
-                fputcsv( $fp, array_keys($row) );
+                fputcsv( $fp, array_keys($row), ',', '"', '\\' );
             }
             $row_data = (!empty($tmp)) ? array_map(function($key, $value) {
                 return $key.": ".$value." | ";
             }, array_keys($tmp), array_values($tmp)) : array();
             $row['data'] = implode($row_data);
             // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fputcsv
-            fputcsv($fp, $row);
+            fputcsv($fp, $row, ',', '"', '\\');
             $i++;
         }
 
@@ -1413,7 +1419,7 @@ class SLL_List_Table extends WP_List_Table
 
         $current_url = isset($_SERVER['REQUEST_URI']) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
         $args = wp_parse_args( wp_parse_url( $current_url, PHP_URL_QUERY ) );
-        $param = false;
+        $param = array();
         if( isset($args['mode']) )
             $param['mode'] = $args['mode'];
 
@@ -1421,7 +1427,7 @@ class SLL_List_Table extends WP_List_Table
             $param['datefilter'] = $args['datefilter'];
 
         $menu_page_url = menu_page_url('login_log', false);
-        ( is_array($param) && !empty($param) ) ? $url = add_query_arg( $param, $menu_page_url) : $url = $menu_page_url;
+        ( !empty($param) ) ? $url = add_query_arg( $param, $menu_page_url) : $url = $menu_page_url;
 
         $views = array(
             'all' => $date_label . esc_html__('Login Results', 'simple-login-log') . ': <a ' . $all . ' href="' . esc_url($url) . '">' . esc_html__('All', 'simple-login-log') . '</a>' . '(' . absint($this->get('allTotal')) . ')',
