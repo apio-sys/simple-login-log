@@ -2,7 +2,7 @@
 Contributors: maxchirkov,apiosys
 Tags: login, log, users
 Requires at least: 6.5
-Tested up to: 6.9
+Tested up to: 7.0
 Stable tag: 2.0.1
 Requires PHP: 7.4
 License: MIT
