@@ -4,7 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
   Plugin Name: Simple Login Log
   Plugin URI: https://apio.systems
   Description: This plugin keeps a log of WordPress user logins. Offers user filtering and export features.
-  Version: 2.0.1
+  Version: 2.0.2
   Author: Joris Le Blansch
   Author URI: https://apio.systems
   License: MIT
@@ -19,7 +19,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
 
  class SimpleLoginLog
  {
-    const VERSION = '2.0.1';
+    const VERSION = '2.0.2';
     private $db_ver = "1.3";
     public $table = 'simple_login_log';
     private $log_duration = null; //days
