@@ -764,7 +764,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $filter_like, $filter_like, $role_like, $filters['result'], $filters['year'], $filters['month'], $limit, $offset),
+                    $table, $filter_like, $filter_like, $role_like, $filters['result'], $filters['year'], $filters['month'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false && $filters['result'] !== false ) {
@@ -773,7 +773,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND login_result = %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $filter_like, $filter_like, $role_like, $filters['result'], $limit, $offset),
+                    $table, $filter_like, $filter_like, $role_like, $filters['result'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false && $filters['year'] !== false ) {
@@ -782,7 +782,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $filter_like, $filter_like, $role_like, $filters['year'], $filters['month'], $limit, $offset),
+                    $table, $filter_like, $filter_like, $role_like, $filters['year'], $filters['month'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['filter'] !== false && $filters['result'] !== false && $filters['year'] !== false ) {
@@ -790,7 +790,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $filter_like, $filter_like, $filters['result'], $filters['year'], $filters['month'], $limit, $offset),
+                    $table, $filter_like, $filter_like, $filters['result'], $filters['year'], $filters['month'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['user_role'] !== false && $filters['result'] !== false && $filters['year'] !== false ) {
@@ -798,7 +798,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE user_role LIKE %s AND login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $role_like, $filters['result'], $filters['year'], $filters['month'], $limit, $offset),
+                    $table, $role_like, $filters['result'], $filters['year'], $filters['month'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['filter'] !== false && $filters['user_role'] !== false ) {
@@ -807,7 +807,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND user_role LIKE %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $filter_like, $filter_like, $role_like, $limit, $offset),
+                    $table, $filter_like, $filter_like, $role_like, $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['filter'] !== false && $filters['result'] !== false ) {
@@ -815,7 +815,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND login_result = %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $filter_like, $filter_like, $filters['result'], $limit, $offset),
+                    $table, $filter_like, $filter_like, $filters['result'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['filter'] !== false && $filters['year'] !== false ) {
@@ -823,7 +823,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $filter_like, $filter_like, $filters['year'], $filters['month'], $limit, $offset),
+                    $table, $filter_like, $filter_like, $filters['year'], $filters['month'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['user_role'] !== false && $filters['result'] !== false ) {
@@ -831,7 +831,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE user_role LIKE %s AND login_result = %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $role_like, $filters['result'], $limit, $offset),
+                    $table, $role_like, $filters['result'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['user_role'] !== false && $filters['year'] !== false ) {
@@ -839,14 +839,14 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE user_role LIKE %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $role_like, $filters['year'], $filters['month'], $limit, $offset),
+                    $table, $role_like, $filters['year'], $filters['month'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['result'] !== false && $filters['year'] !== false ) {
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE login_result = %s AND YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $filters['result'], $filters['year'], $filters['month'], $limit, $offset),
+                    $table, $filters['result'], $filters['year'], $filters['month'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['filter'] !== false ) {
@@ -854,7 +854,7 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE (user_login LIKE %s OR ip LIKE %s) ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $filter_like, $filter_like, $limit, $offset),
+                    $table, $filter_like, $filter_like, $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['user_role'] !== false ) {
@@ -862,21 +862,21 @@ if( !class_exists( 'SimpleLoginLog' ) )
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE user_role LIKE %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $role_like, $limit, $offset),
+                    $table, $role_like, $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['result'] !== false ) {
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE login_result = %s ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $filters['result'], $limit, $offset),
+                    $table, $filters['result'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } elseif ( $filters['year'] !== false ) {
             $data = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM %i WHERE YEAR(time) = %d AND MONTH(time) = %d ORDER BY %i {$order} LIMIT %d OFFSET %d",
-                    $table, $orderby, $filters['year'], $filters['month'], $limit, $offset),
+                    $table, $filters['year'], $filters['month'], $orderby, $limit, $offset),
                 'ARRAY_A'
             );
         } else {
